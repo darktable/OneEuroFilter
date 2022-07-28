@@ -1,16 +1,21 @@
-
 {
     "name": "jp.keijiro.oneeuro",
     "displayName": "One Euro Filter",
     "version": "1.0.0",
     "unity": "2019.4",
     "description": "Implementation of OneEuro filter.",
-    "dependencies": { },
+    "dependencies": {},
     "samples": [
         {
-          "displayName": "MouseTrack",
-          "description": "Example of OneEuro 2D filtering",
-          "path": "Samples~/MouseTrack"
+            "displayName": "MouseTrack",
+            "description": "Example of OneEuro 2D filtering",
+            "path": "Samples~/MouseTrack"
         }
-      ]
+    ],
+    "author": {
+        "name": "Keijiro Takahashi",
+        "email": "",
+        "url": "https://github.com/keijiro/OneEuroFilter"
+    },
+    "type": "library"
 }
