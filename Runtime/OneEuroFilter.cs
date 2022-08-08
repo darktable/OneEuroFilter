@@ -41,7 +41,12 @@ public sealed class OneEuroFilter : OneEuroFilterBase<float>
 
     public override void Reset()
     {
-        SetPrevious(0, 0, 0);
+        Reset(0);
+    }
+
+    public override void Reset(float reset)
+    {
+        SetPrevious(0, reset, 0);
     }
 
     #region Public step function
@@ -77,7 +82,12 @@ public sealed class OneEuroFilter2 : OneEuroFilterBase<Vector2>
 
     public override void Reset()
     {
-        SetPrevious(0, Vector2.zero, Vector2.zero);
+        Reset(Vector2.zero);
+    }
+
+    public override void Reset(Vector2 reset)
+    {
+        SetPrevious(0, reset, Vector2.zero);
     }
 
     #region Public step function
@@ -113,7 +123,12 @@ public sealed class OneEuroFilter3 : OneEuroFilterBase<Vector3>
 
     public override void Reset()
     {
-        SetPrevious(0, Vector3.zero, Vector3.zero);
+        Reset(Vector3.zero);
+    }
+
+    public override void Reset(Vector3 reset)
+    {
+        SetPrevious(0, reset, Vector3.zero);
     }
 
     #region Public step function
@@ -152,7 +167,12 @@ public sealed class OneEuroFilterQuaternion : OneEuroFilterBase<Quaternion>
 
     public override void Reset()
     {
-        SetPrevious(0, Quaternion.identity, Quaternion.identity);
+        Reset(Quaternion.identity);
+    }
+
+    public override void Reset(Quaternion reset)
+    {
+        SetPrevious(0, reset, reset * Quaternion.Inverse(reset));
     }
 
     #region Public step function
@@ -220,6 +240,7 @@ public abstract class OneEuroFilterBase<T> : IOneEuroFilter where T : IEquatable
     }
 
     public abstract void Reset();
+    public abstract void Reset(T prevX);
 
     #region Public step function
 
