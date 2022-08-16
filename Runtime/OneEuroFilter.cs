@@ -64,7 +64,7 @@ public sealed class OneEuroFilter : OneEuroFilterBase<float>
         float dx = (pX - m_PrevX) / tE;
         float dxRes = Mathf.Lerp(m_PrevDx, dx, Alpha(tE, k_DCutOff));
 
-        float cutoff = m_MinCutoff + m_Beta * dxRes;
+        float cutoff = m_MinCutoff + m_Beta * Mathf.Abs(dxRes);
         float xRes = Mathf.Lerp(m_PrevX, pX, Alpha(tE, cutoff));
 
         SetPrevious(pT, xRes, dxRes);
