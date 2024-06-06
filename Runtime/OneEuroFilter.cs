@@ -209,12 +209,68 @@ public sealed class OneEuroFilterQuaternion : OneEuroFilterBase<Quaternion>
     #endregion
 }
 
+// Direction filter uses Slerp instead of Lerp.
+public sealed class OneEuroFilterDirection : OneEuroFilterBase<Vector3>
+{
+    public OneEuroFilterDirection(float pBeta = 0.0f, float pMinCutoff = 1.0f)
+        : base(pBeta, pMinCutoff)
+    {
+    }
+
+    public override void Reset()
+    {
+        Reset(Vector3.zero);
+    }
+
+    public override void Reset(Vector3 reset)
+    {
+        SetPrevious(0, reset, Vector3.zero);
+    }
+
+    #region Public step function
+
+    public override Vector3 Step(float pT, Vector3 pX)
+    {
+        float tE = pT - m_PrevT;
+
+        // Do nothing if the time difference is too small.
+        if (tE < k_MinTimeDelta)
+        {
+            return m_PrevX;
+        }
+
+        var dx = new Vector3((pX.x - m_PrevX.x) / tE, (pX.y - m_PrevX.y) / tE, (pX.z - m_PrevX.z) / tE);
+        var dxRes = Vector3.Slerp(m_PrevDx, dx, Alpha(tE, k_DCutOff));
+
+        float cutoff = m_MinCutoff + m_Beta * dxRes.magnitude;
+        var xRes = Vector3.Slerp(m_PrevX, pX, Alpha(tE, cutoff));
+
+        SetPrevious(pT, xRes, dxRes);
+
+        return xRes;
+    }
+
+    #endregion
+}
+
 public sealed class OneEuroFilterPose : OneEuroFilterBase<Pose>
 {
+    private readonly OneEuroFilter3 m_positionFilter;
+    private readonly OneEuroFilterQuaternion m_rotationFilter;
+
     public OneEuroFilterPose(float pBeta = 0.0f, float pMinCutoff = 1.0f)
         : base(pBeta, pMinCutoff)
     {
-        Reset();
+        m_positionFilter = new OneEuroFilter3(pBeta, pMinCutoff);
+        m_rotationFilter = new OneEuroFilterQuaternion(pBeta, pMinCutoff);
+    }
+
+    public override void SetParams(float pBeta, float pMinCutoff)
+    {
+        base.SetParams(pBeta, pMinCutoff);
+
+        m_positionFilter.SetParams(pBeta, pMinCutoff);
+        m_rotationFilter.SetParams(pBeta, pMinCutoff);
     }
 
     public override void Reset()
@@ -225,6 +281,9 @@ public sealed class OneEuroFilterPose : OneEuroFilterBase<Pose>
     public override void Reset(Pose reset)
     {
         SetPrevious(0, reset, default);
+
+        m_positionFilter.Reset(reset.position);
+        m_rotationFilter.Reset(reset.rotation);
     }
 
     #region Public step function
@@ -239,50 +298,73 @@ public sealed class OneEuroFilterPose : OneEuroFilterBase<Pose>
             return m_PrevX;
         }
 
-        // inelegant filter for the Pose struct.
+        pX.position = m_positionFilter.Step(pT, pX.position);
+        pX.rotation = m_rotationFilter.Step(pT, pX.rotation);
 
-        // position
-        var pos = pX.position;
-        var prevPos = m_PrevX.position;
-        var prevDeltaPos = m_PrevDx.position;
+        SetPrevious(pT, pX, default);
 
-        var deltaPos = new Vector3((pos.x - prevPos.x) / tE, (pos.y - prevPos.y) / tE, (pos.z - prevPos.z) / tE);
-        var resultDeltaPos = Vector3.Lerp(prevDeltaPos, deltaPos, Alpha(tE, k_DCutOff));
-
-        float posCutoff = m_MinCutoff + m_Beta * resultDeltaPos.magnitude;
-        var resultPos = Vector3.Lerp(prevPos, pos, Alpha(tE, posCutoff));
-
-        // rotation
-        var rot = pX.rotation;
-        var prevRot = m_PrevX.rotation;
-
-        // derived from the VRPN OneEuro Quaternion filter
-        float rate = 1.0f / tE;
-
-        // Quaternion subtraction is multiplication by the inverse
-        var deltaRot = rot * Quaternion.Inverse(prevRot);
-
-        deltaRot.Set(deltaRot.x * rate, deltaRot.y * rate, deltaRot.z * rate, deltaRot.w * rate);
-
-        deltaRot.w += 1.0f - rate;
-        deltaRot = Quaternion.Normalize(deltaRot);
-
-        float rotCutoff = m_MinCutoff + m_Beta * 2.0f * Mathf.Acos(deltaRot.w);
-        var resultRot = Quaternion.Slerp(prevRot, rot, Alpha(tE, rotCutoff));
-
-        var newPose = new Pose(resultPos, resultRot);
-        var deltaPose = new Pose(deltaPos, deltaRot);
-
-        SetPrevious(pT, newPose, deltaPose);
-
-        return newPose;
+        return pX;
     }
 
     #endregion
 }
 
+public class OneEuroFilterRay : OneEuroFilterBase<Ray>
+{
+    private readonly OneEuroFilter3 m_originFilter;
+    private readonly OneEuroFilterDirection m_directionFilter;
 
-public abstract class OneEuroFilterBase<T> : IOneEuroFilter where T : IEquatable<T>
+    public OneEuroFilterRay(float pBeta = 0.0f, float pMinCutoff = 1.0f) : base(pBeta, pMinCutoff)
+    {
+        m_originFilter = new OneEuroFilter3(pBeta, pMinCutoff);
+        m_directionFilter = new OneEuroFilterDirection(pBeta, pMinCutoff);
+    }
+
+    public override void SetParams(float pBeta, float pMinCutoff)
+    {
+        base.SetParams(pBeta, pMinCutoff);
+
+        m_originFilter.SetParams(pBeta, pMinCutoff);
+        m_directionFilter.SetParams(pBeta, pMinCutoff);
+    }
+
+    public override void Reset()
+    {
+        Reset(default);
+    }
+
+    public override void Reset(Ray reset)
+    {
+        SetPrevious(0, reset, default);
+
+        m_originFilter.Reset(reset.origin);
+        m_directionFilter.Reset(reset.direction);
+    }
+
+    #region Public step function
+
+    public override Ray Step(float pT, Ray pX)
+    {
+        float tE = pT - m_PrevT;
+
+        // Do nothing if the time difference is too small.
+        if (tE < k_MinTimeDelta)
+        {
+            return m_PrevX;
+        }
+
+        pX.origin = m_originFilter.Step(pT, pX.origin);
+        pX.direction = m_directionFilter.Step(pT, pX.direction);
+
+        SetPrevious(pT, pX, default);
+
+        return pX;
+    }
+
+    #endregion
+}
+
+public abstract class OneEuroFilterBase<T> : IOneEuroFilter
 {
     #region Public properties
 
@@ -299,6 +381,8 @@ public abstract class OneEuroFilterBase<T> : IOneEuroFilter where T : IEquatable
         get => m_MinCutoff;
     }
 
+    public T Value => m_PrevX;
+
     #endregion
 
     public void SetParams(OneEuroFilterParams pParams)
@@ -306,7 +390,7 @@ public abstract class OneEuroFilterBase<T> : IOneEuroFilter where T : IEquatable
         SetParams(pParams.beta, pParams.minCutoff);
     }
 
-    public void SetParams(float pBeta, float pMinCutoff)
+    public virtual void SetParams(float pBeta, float pMinCutoff)
     {
         m_Beta = pBeta;
         m_MinCutoff = pMinCutoff;
@@ -317,9 +401,6 @@ public abstract class OneEuroFilterBase<T> : IOneEuroFilter where T : IEquatable
 
     #region Public step function
 
-    /// <summary>
-    ///
-    /// </summary>
     /// <param name="pT">The current time (NB: not delta time!)</param>
     /// <param name="pX">The current value</param>
     /// <returns>Filtered value</returns>
