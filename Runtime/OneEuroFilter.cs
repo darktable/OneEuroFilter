@@ -209,6 +209,79 @@ public sealed class OneEuroFilterQuaternion : OneEuroFilterBase<Quaternion>
     #endregion
 }
 
+public sealed class OneEuroFilterPose : OneEuroFilterBase<Pose>
+{
+    public OneEuroFilterPose(float pBeta = 0.0f, float pMinCutoff = 1.0f)
+        : base(pBeta, pMinCutoff)
+    {
+        Reset();
+    }
+
+    public override void Reset()
+    {
+        Reset(default);
+    }
+
+    public override void Reset(Pose reset)
+    {
+        SetPrevious(0, reset, default);
+    }
+
+    #region Public step function
+
+    public override Pose Step(float pT, Pose pX)
+    {
+        float tE = pT - m_PrevT;
+
+        // Do nothing if the time difference is too small.
+        if (tE < k_MinTimeDelta)
+        {
+            return m_PrevX;
+        }
+
+        // inelegant filter for the Pose struct.
+
+        // position
+        var pos = pX.position;
+        var prevPos = m_PrevX.position;
+        var prevDeltaPos = m_PrevDx.position;
+
+        var deltaPos = new Vector3((pos.x - prevPos.x) / tE, (pos.y - prevPos.y) / tE, (pos.z - prevPos.z) / tE);
+        var resultDeltaPos = Vector3.Lerp(prevDeltaPos, deltaPos, Alpha(tE, k_DCutOff));
+
+        float posCutoff = m_MinCutoff + m_Beta * resultDeltaPos.magnitude;
+        var resultPos = Vector3.Lerp(prevPos, pos, Alpha(tE, posCutoff));
+
+        // rotation
+        var rot = pX.rotation;
+        var prevRot = m_PrevX.rotation;
+
+        // derived from the VRPN OneEuro Quaternion filter
+        float rate = 1.0f / tE;
+
+        // Quaternion subtraction is multiplication by the inverse
+        var deltaRot = rot * Quaternion.Inverse(prevRot);
+
+        deltaRot.Set(deltaRot.x * rate, deltaRot.y * rate, deltaRot.z * rate, deltaRot.w * rate);
+
+        deltaRot.w += 1.0f - rate;
+        deltaRot = Quaternion.Normalize(deltaRot);
+
+        float rotCutoff = m_MinCutoff + m_Beta * 2.0f * Mathf.Acos(deltaRot.w);
+        var resultRot = Quaternion.Slerp(prevRot, rot, Alpha(tE, rotCutoff));
+
+        var newPose = new Pose(resultPos, resultRot);
+        var deltaPose = new Pose(deltaPos, deltaRot);
+
+        SetPrevious(pT, newPose, deltaPose);
+
+        return newPose;
+    }
+
+    #endregion
+}
+
+
 public abstract class OneEuroFilterBase<T> : IOneEuroFilter where T : IEquatable<T>
 {
     #region Public properties
@@ -244,7 +317,25 @@ public abstract class OneEuroFilterBase<T> : IOneEuroFilter where T : IEquatable
 
     #region Public step function
 
+    /// <summary>
+    ///
+    /// </summary>
+    /// <param name="pT">The current time (NB: not delta time!)</param>
+    /// <param name="pX">The current value</param>
+    /// <returns>Filtered value</returns>
     public abstract T Step(float pT, T pX);
+
+    public T DeltaStep(T pX, float deltaTime)
+    {
+        if (deltaTime < k_MinTimeDelta)
+        {
+            m_PrevT += deltaTime;
+            return m_PrevX;
+        }
+
+        var totalTime = m_PrevT + deltaTime;
+        return Step(totalTime, pX);
+    }
 
     #endregion
 
