@@ -198,10 +198,12 @@ public sealed class OneEuroFilterQuaternion : OneEuroFilterBase<Quaternion>
         dx.w += 1.0f - rate;
         dx = Quaternion.Normalize(dx);
 
-        float cutoff = m_MinCutoff + m_Beta * 2.0f * Mathf.Acos(dx.w);
+        var dxRes = Quaternion.Slerp(m_PrevDx, dx, Alpha(tE, k_DCutOff));
+
+        float cutoff = m_MinCutoff + m_Beta * 2.0f * Mathf.Acos(Mathf.Clamp(dxRes.w, -1.0f, 1.0f));
         var xRes = Quaternion.Slerp(m_PrevX, pX, Alpha(tE, cutoff));
 
-        SetPrevious(pT, xRes, dx);
+        SetPrevious(pT, xRes, dxRes);
 
         return xRes;
     }
